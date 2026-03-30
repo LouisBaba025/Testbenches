@@ -186,3 +186,27 @@ def check_custom_chain(body: CustomChainRequest):
         lm_max_speed=body.lm_max_speed_rpm,
     )
     return CustomChainResult(**calc)
+
+
+@app.put("/api/testbenches/{tb_id}", response_model=TestbenchOut)
+def update_testbench(tb_id: int, body: dict, db: Session = Depends(get_db)):
+    from .models import Testbench as TB
+    tb = db.query(TB).filter(TB.id == tb_id).first()
+    if not tb:
+        raise HTTPException(404, "Testbench not found")
+    for k, v in body.items():
+        if hasattr(tb, k):
+            setattr(tb, k, v)
+    db.commit()
+    db.refresh(tb)
+    return tb
+
+
+@app.post("/api/testbenches", response_model=TestbenchOut)
+def create_testbench(body: dict, db: Session = Depends(get_db)):
+    from .models import Testbench as TB
+    tb = TB(**body)
+    db.add(tb)
+    db.commit()
+    db.refresh(tb)
+    return tb
