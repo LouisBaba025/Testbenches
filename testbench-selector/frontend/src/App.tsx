@@ -284,6 +284,15 @@ export default function App() {
             </div>
           })}
         </div>
+        {results.best_fit_id===null&&(()=>{
+          const idealRatio=Math.max(Math.round(testSpeed/3000*10)/10, Math.round(testTorque/13*10)/10)
+          const stdRatios=[1,3,5,7,10,15,20,25,30,50,100]
+          const nearest=stdRatios.reduce((a,b)=>Math.abs(b-idealRatio)<Math.abs(a-idealRatio)?b:a)
+          return<div style={{marginTop:'10px',padding:'10px 14px',borderRadius:'8px',border:'1.5px dashed #FAC775',background:'#FFF9ED'}}>
+            <div style={{fontSize:'11px',fontWeight:500,color:'#633806',marginBottom:'4px'}}>No testbench compatible</div>
+            <div style={{fontSize:'11px',color:'#7A5B1E'}}>Suggested gear ratio: <b>{nearest}:1</b> would work with ASC1-082A load machine (ideal ratio: {idealRatio}:1)</div>
+          </div>
+        })()}
       </div>}
     </div>
 

@@ -111,3 +111,17 @@ class CustomChainResult(BaseModel):
     lm_torque_at_test: float
     lm_speed_utilization_pct: float
     lm_torque_utilization_pct: float
+
+
+class GearSuggestionRequest(BaseModel):
+    peak_torque_nm: float
+    desired_speed_rpm: float
+
+
+class GearSuggestionResult(BaseModel):
+    best_existing_ratio: Optional[float] = None
+    best_existing_label: Optional[str] = None
+    best_existing_compatible: bool = False
+    best_existing_explanation: Optional[str] = None
+    custom_gear_ratio: float
+    custom_gear_explanation: str

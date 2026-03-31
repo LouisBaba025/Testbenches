@@ -8,7 +8,8 @@ from .schemas import (
     ActuatorOut, ActuatorCreate, LoadMachineOut, GearRatioOut,
     TorqueSensorOut, TestbenchOut, ComponentsOut,
     CompatibilityRequest, CompatibilityResponse, TestbenchResult,
-    CustomChainRequest, CustomChainResult
+    CustomChainRequest, CustomChainResult,
+    GearSuggestionRequest, GearSuggestionResult,
 )
 from .seed import seed
 
@@ -210,3 +211,62 @@ def create_testbench(body: dict, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(tb)
     return tb
+
+
+# ── Gear Suggestion ──────────────────────────────────────────────────────────
+LM_PEAK_TORQUE = 13.0   # ASC1-082A peak Nm
+LM_MAX_SPEED = 3000     # ASC1-082A max rpm
+SAFETY_FACTOR = 1.1
+
+@app.post("/api/suggest-gear", response_model=GearSuggestionResult)
+def suggest_gear(body: GearSuggestionRequest, db: Session = Depends(get_db)):
+    gear_ratios = db.query(GearRatio).all()
+
+    best_ratio = None
+    best_label = None
+    best_compatible = False
+    best_explanation = None
+
+    for gr in gear_ratios:
+        max_dut_speed = LM_MAX_SPEED / gr.ratio
+        max_dut_torque = LM_PEAK_TORQUE * gr.ratio
+        speed_ok = body.desired_speed_rpm <= max_dut_speed
+        torque_ok = body.peak_torque_nm <= max_dut_torque
+
+        if speed_ok and torque_ok:
+            if best_ratio is None or gr.ratio < best_ratio:
+                best_ratio = gr.ratio
+                best_label = gr.label
+                best_compatible = True
+                best_explanation = (
+                    f"Gear {gr.label} works: max DUT speed={max_dut_speed:.1f} rpm, "
+                    f"max DUT torque={max_dut_torque:.1f} Nm"
+                )
+        elif best_ratio is None or not best_compatible:
+            issues = []
+            if not speed_ok:
+                issues.append(f"speed {body.desired_speed_rpm} > {max_dut_speed:.1f} rpm")
+            if not torque_ok:
+                issues.append(f"torque {body.peak_torque_nm} > {max_dut_torque:.1f} Nm")
+            if best_ratio is None:
+                best_ratio = gr.ratio
+                best_label = gr.label
+                best_explanation = f"Gear {gr.label} closest but limited by: {', '.join(issues)}"
+
+    # Ideal custom gear ratio: DUT_speed / LM_max_speed * safety_factor
+    custom_ratio = body.desired_speed_rpm / LM_MAX_SPEED * SAFETY_FACTOR
+    custom_ratio = max(custom_ratio, body.peak_torque_nm / LM_PEAK_TORQUE * SAFETY_FACTOR)
+    custom_ratio = round(custom_ratio, 2)
+
+    return GearSuggestionResult(
+        best_existing_ratio=best_ratio,
+        best_existing_label=best_label,
+        best_existing_compatible=best_compatible,
+        best_existing_explanation=best_explanation,
+        custom_gear_ratio=custom_ratio,
+        custom_gear_explanation=(
+            f"Ideal gear ratio {custom_ratio}:1 would handle "
+            f"{body.peak_torque_nm} Nm at {body.desired_speed_rpm} rpm "
+            f"with ASC1-082A (safety factor {SAFETY_FACTOR}x)"
+        ),
+    )
